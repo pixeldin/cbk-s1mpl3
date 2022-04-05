@@ -21,7 +21,6 @@ const HOST_PREFIX = "localhost:8888"
 const MOCK_API = "/fake-api"
 
 var (
-	// 是否熔断过
 	NeetCoolDown = false
 )
 
@@ -30,9 +29,9 @@ func TestCircuitBreakerImp(t *testing.T) {
 
 	cbk := &CircuitBreakerImp{}
 	cbk.apiMap = make(map[string]*apiSnapShop)
-	// 控制时间窗口，15秒一轮, 重置api错误率
+	// reset api metric when round end per 15s
 	cbk.roundInterval = util.ToDuration(15 * time.Second)
-	// 熔断之后，5秒不出现错误再恢复
+	// allow to access when cbk triggered in a round per 5s
 	cbk.recoverInterval = util.ToDuration(5 * time.Second)
 	cbk.minCheck = 5
 	cbk.cbkErrRate = 0.5

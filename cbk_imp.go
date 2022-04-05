@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// 请求API快照
 type apiSnapShop struct {
 	apiName string
 	isPaused   bool
@@ -18,7 +17,6 @@ type apiSnapShop struct {
 	roundLast  int64 // start timestamp of this round
 }
 
-// 熔断器实现体
 type CircuitBreakerImp struct {
 	lock            sync.RWMutex
 	apiMap          map[string]*apiSnapShop // api mapping for your server
