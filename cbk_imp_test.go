@@ -2,7 +2,6 @@ package cbk_s1mpl3
 
 import (
 	"cbk-s1mpl3/util"
-	"fmt"
 	log "github.com/sirupsen/logrus"
 	"testing"
 	"time"
@@ -18,33 +17,61 @@ func init() {
 	log.SetLevel(lvl)
 }
 
-const HOST_PREFIX = "http://www.abc.com"
-const API_PREFIX = "/fake-api"
+const HOST_PREFIX = "localhost:8888"
+const MOCK_API = "/fake-api"
 
 var (
-	// 是否熔断过
-	HasCbk = false
+	NeetCoolDown = false
 )
 
 func TestCircuitBreakerImp(t *testing.T) {
-	log.Infof("Test for cbk: %s", HOST_PREFIX+API_PREFIX)
+	log.Infof("Test for cbk: %s", HOST_PREFIX+MOCK_API)
 
 	cbk := &CircuitBreakerImp{}
 	cbk.apiMap = make(map[string]*apiSnapShop)
-	// 控制时间窗口，15秒一轮, 重置api错误率
+	// reset api metric when round end per 15s
 	cbk.roundInterval = util.ToDuration(15 * time.Second)
-	// 熔断之后，5秒不出现错误再恢复
+	// allow to access when cbk triggered in a round per 5s
 	cbk.recoverInterval = util.ToDuration(5 * time.Second)
 	cbk.minCheck = 5
 	cbk.cbkErrRate = 0.5
-	StartJob(cbk)
+	StartMock(cbk)
 }
 
-func StartJob(cbk *CircuitBreakerImp) {
+func StartMock(cbk *CircuitBreakerImp) {
 	for {
-		// 每秒发1次失败
-		ReqForTest(cbk, 0)
-		time.Sleep(time.Second * 1)
+		// mock failed for every second
+		ticker := time.NewTicker(time.Second)
+		select {
+		case <-ticker.C:
+			ReqForTest(cbk, 0)
+		}
+	}
+}
+
+func ReqForTest(cbk *CircuitBreakerImp, turn int) {
+	//log.Infof("Ready to reqForTest: %s, turn-id-%v", HOST_PREFIX+MOCK_API, turn)
+
+	if !cbk.CanAccess(MOCK_API) {
+		log.Warnf("Api: %v is break, wait for next round or success for one...", MOCK_API)
+		NeetCoolDown = true
+		return
+	} else {
+		//log.Infof("Request access allow: %s", HOST_PREFIX+MOCK_API)
+		// after
+		if NeetCoolDown && turn == 0 {
+			NeetCoolDown = false
+			turn = 1
+			log.Warnf("Transfer fail to success: %s, turn-id-%v", HOST_PREFIX+MOCK_API, turn)
+		}
+	}
+
+	if turn == 0 {
+		log.Errorf("# Meet failed ReqForTest: %s", HOST_PREFIX+MOCK_API)
+		cbk.Failed(MOCK_API)
+	} else {
+		log.Infof("# Meet success ReqForTest: %s", HOST_PREFIX+MOCK_API)
+		cbk.Succeed(MOCK_API)
 	}
 }
 
@@ -58,36 +85,4 @@ func reportStatus(cbk *CircuitBreakerImp) {
 		}
 		time.Sleep(3 * time.Second)
 	}
-}
-
-func ReqForTest(cbk *CircuitBreakerImp, req int) {
-	// mock failed case
-	mockAPI := API_PREFIX //+ strconv.Itoa(req)
-	//log.Infof("Ready to reqForTest: %s, req-id-%v", HOST_PREFIX+mockAPI, req)
-
-	if !cbk.CanAccess(mockAPI, req) {
-		log.Warnf("Api: %v is break, req-id-%v, wait for next round or success for one...", mockAPI, req)
-		HasCbk = true
-		return
-	} else {
-		log.Infof("Request can access: %s, req-id-%v", HOST_PREFIX+mockAPI, req)
-		// 度过恢复期, 熔断恢复之后, 跳过错误让其成功
-		if HasCbk && req == 0 {
-			HasCbk = false
-			req = 1
-			log.Warnf("Transfer fail to success: %s, req-id-%v", HOST_PREFIX+mockAPI, req)
-		}
-	}
-
-	if req == 0 {
-		log.Errorf("# Meet failed ReqForTest: %s", HOST_PREFIX+mockAPI)
-		cbk.Failed(mockAPI)
-	} else {
-		log.Infof("# Meet success ReqForTest: %s", HOST_PREFIX+mockAPI)
-		cbk.Succeed(mockAPI)
-	}
-}
-
-func TestSome(t *testing.T) {
-	fmt.Print("just for fun")
 }
